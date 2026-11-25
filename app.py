@@ -23,7 +23,7 @@ with tab1:
 with tab2:
     st.subheader("Turn Your Notes Into an Exam Quiz")
     board = st.selectbox("Select your UK Exam Board:", ["AQA", "Edexcel", "OCR", "WJEC"])
-    photo = st.camera_input("Snap a photo of your textbook or notes") or st.file_uploader("Or upload a photo", type=["jpg", "png", "jpeg"])
+    photo = st.file_uploader("📸 Tap to Take Photo (with Zoom) or Upload Notes", type=["jpg", "png", "jpeg"])
     api_key = st.secrets.get("GEMINI_API_KEY", "")
 
     if photo and api_key:
@@ -41,3 +41,4 @@ with tab2:
                     st.markdown(response.text)
                 except Exception as e:
                     st.error(f"API Error: {e}")
+
