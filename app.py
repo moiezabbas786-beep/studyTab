@@ -1,25 +1,100 @@
-import time
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 from PIL import Image
 
 st.set_page_config(page_title="StudyTap AI", page_icon="⚡", layout="centered")
 st.title("⚡ StudyTap AI Revision Coach")
 
-tab1, tab2 = st.tabs(["⏱️ 1. Focus Timer", "📸 2. AI Snap-to-Quiz"])
+tab1, tab2 = st.tabs(["⏱️ 1. Strict Focus Timer", "📸 2. AI Snap-to-Quiz"])
 
+# --- TAB 1: STRICT FOCUS TIMER (DETECTS LEAVING THE APP) ---
 with tab1:
-    st.subheader("Phone-Free Focus Block")
+    st.subheader("Phone-Free Strict Focus Mode")
+    st.write("Start your timer and keep this screen open. **If you switch to TikTok, WhatsApp, or another app, your session fails and resets!**")
+    
     options = (1, 25, 45)
     mins = st.radio("Choose session length:", options, horizontal=True, format_func=lambda x: f"{x} mins")
-    if st.button("Start Focus Countdown ▶️", type="primary"):
-        placeholder = st.empty()
-        for remaining in range(mins * 60, -1, -1):
-            m, s = divmod(remaining, 60)
-            placeholder.markdown(f"<h1 style='text-align: center; font-size: 64px;'>{m:02d}:{s:02d}</h1>", unsafe_allow_html=True)
-            time.sleep(1)
-        st.success("🎉 Time's up! Switch to the 'AI Snap-to-Quiz' tab!")
 
+    # Interactive HTML/JS component that runs smoothly in the browser and detects tab switching
+    timer_html = f"""
+    <div id="box" style="font-family: sans-serif; text-align: center; padding: 24px; border-radius: 16px; background: #161b22; color: white; border: 2px solid #30363d;">
+        <div id="status" style="font-size: 16px; color: #8b949e; margin-bottom: 8px;">Ready to lock in</div>
+        <div id="clock" style="font-size: 64px; font-weight: bold; letter-spacing: 2px; margin: 10px 0;">{mins:02d}:00</div>
+        <button id="startBtn" onclick="startTimer()" style="background: #ff4b4b; color: white; border: none; padding: 14px 28px; font-size: 18px; font-weight: bold; border-radius: 10px; cursor: pointer; margin-top: 10px;">
+            Lock In & Start ▶️
+        </button>
+    </div>
+
+    <script>
+        let totalSeconds = {mins} * 60;
+        let remaining = totalSeconds;
+        let running = false;
+        let interval = null;
+
+        function updateDisplay() {{
+            let m = Math.floor(remaining / 60);
+            let s = remaining % 60;
+            document.getElementById("clock").innerText = String(m).padStart(2, '0') + ":" + String(s).padStart(2, '0');
+        }}
+
+        function playBeep(freq, duration) {{
+            try {{
+                let ctx = new (window.AudioContext || window.webkitAudioContext)();
+                let osc = ctx.createOscillator();
+                osc.frequency.value = freq;
+                osc.connect(ctx.destination);
+                osc.start();
+                setTimeout(() => osc.stop(), duration);
+            }} catch(e) {{}}
+        }}
+
+        function startTimer() {{
+            if (running) return;
+            running = true;
+            remaining = totalSeconds;
+            updateDisplay();
+            document.getElementById("box").style.borderColor = "#1f6feb";
+            document.getElementById("status").innerText = "🔒 STRICT MODE ACTIVE — Do not leave this screen!";
+            document.getElementById("status").style.color = "#58a6ff";
+            document.getElementById("startBtn").style.display = "none";
+
+            interval = setInterval(() => {{
+                remaining--;
+                updateDisplay();
+                if (remaining <= 0) {{
+                    clearInterval(interval);
+                    running = false;
+                    document.getElementById("box").style.borderColor = "#2ea043";
+                    document.getElementById("status").innerText = "🎉 COMPLETE! Tap '2. AI Snap-to-Quiz' above to test yourself!";
+                    document.getElementById("status").style.color = "#3fb950";
+                    document.getElementById("startBtn").innerText = "Start Another Session 🔄";
+                    document.getElementById("startBtn").style.display = "inline-block";
+                    playBeep(880, 400);
+                }}
+            }}, 1000);
+        }}
+
+        // Detect if student switches apps or leaves the browser tab
+        document.addEventListener("visibilitychange", () => {{
+            if (document.hidden && running) {{
+                clearInterval(interval);
+                running = false;
+                remaining = totalSeconds;
+                updateDisplay();
+                document.getElementById("box").style.borderColor = "#da3633";
+                document.getElementById("status").innerText = "❌ FOCUS BROKEN! You left the app — timer reset!";
+                document.getElementById("status").style.color = "#f85149";
+                document.getElementById("startBtn").innerText = "Try Again 🔄";
+                document.getElementById("startBtn").style.display = "inline-block";
+                playBeep(220, 500);
+            }}
+        }});
+    </script>
+    """
+    components.html(timer_html, height=260)
+
+# --- TAB 2: AI PHOTO-TO-GCSE-QUIZ ---
 with tab2:
     st.subheader("Turn Your Notes Into an Exam Quiz")
     board = st.selectbox("Select your UK Exam Board:", ["AQA", "Edexcel", "OCR", "WJEC"])
@@ -35,10 +110,9 @@ with tab2:
                     client = genai.Client(api_key=api_key)
                     prompt = f"You are a strict UK {board} GCSE/A-Level examiner. Look at this photo of a student's textbook or revision notes. Write 5 active-recall exam questions based ONLY on this photo using official {board} command words. List Questions 1 to 5 first, then put '---' and list the Mark Scheme Answers below."
                     response = client.models.generate_content(
-                        model="gemini-3.5-flash",
+                        model="gemini-2.5-flash",
                         contents=[img, prompt]
                     )
                     st.markdown(response.text)
                 except Exception as e:
                     st.error(f"API Error: {e}")
-
