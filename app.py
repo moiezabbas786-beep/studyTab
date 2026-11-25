@@ -109,7 +109,7 @@ with tab2:
                     client = genai.Client(api_key=api_key)
                     prompt = f"You are a strict UK {board} GCSE/A-Level examiner. Look at this photo of a student's textbook or revision notes. Write 5 numbered active-recall exam questions based ONLY on this photo using official {board} command words. Do NOT include the answers yet so the student can try answering them first!"
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.5-flash",
                         contents=[img, prompt]
                     )
                     st.session_state["quiz_questions"] = response.text
