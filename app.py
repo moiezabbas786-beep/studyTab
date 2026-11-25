@@ -6,9 +6,11 @@ from PIL import Image
 st.set_page_config(page_title="StudyTap AI", page_icon="⚡", layout="centered")
 st.title("⚡ StudyTap AI Revision Coach")
 
-tab1, tab2 = st.tabs(["⏱️ 1. Strict Focus Timer", "📸 2. AI Snap-to-Quiz"])
+api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-# --- TAB 1: STRICT FOCUS TIMER (DETECTS LEAVING THE APP) ---
+tab1, tab2, tab3 = st.tabs(["⏱️ Focus Timer", "📸 Snap-to-Quiz", "🤖 AI Exam Tutor"])
+
+# --- TAB 1: STRICT FOCUS TIMER ---
 with tab1:
     st.subheader("Phone-Free Strict Focus Mode")
     st.write("Start your timer and keep this screen open. **If you switch to TikTok, WhatsApp, or another app, your session fails and resets!**")
@@ -16,7 +18,6 @@ with tab1:
     options = (1, 25, 45)
     mins = st.radio("Choose session length:", options, horizontal=True, format_func=lambda x: f"{x} mins")
 
-    # Interactive HTML/JS component that runs smoothly in the browser and detects tab switching
     timer_html = f"""
     <div id="box" style="font-family: sans-serif; text-align: center; padding: 24px; border-radius: 16px; background: #161b22; color: white; border: 2px solid #30363d;">
         <div id="status" style="font-size: 16px; color: #8b949e; margin-bottom: 8px;">Ready to lock in</div>
@@ -66,7 +67,7 @@ with tab1:
                     clearInterval(interval);
                     running = false;
                     document.getElementById("box").style.borderColor = "#2ea043";
-                    document.getElementById("status").innerText = "🎉 COMPLETE! Tap '2. AI Snap-to-Quiz' above to test yourself!";
+                    document.getElementById("status").innerText = "🎉 COMPLETE! Tap '📸 Snap-to-Quiz' above to test yourself!";
                     document.getElementById("status").style.color = "#3fb950";
                     document.getElementById("startBtn").innerText = "Start Another Session 🔄";
                     document.getElementById("startBtn").style.display = "inline-block";
@@ -75,7 +76,6 @@ with tab1:
             }}, 1000);
         }}
 
-        // Detect if student switches apps or leaves the browser tab
         document.addEventListener("visibilitychange", () => {{
             if (document.hidden && running) {{
                 clearInterval(interval);
@@ -94,12 +94,11 @@ with tab1:
     """
     components.html(timer_html, height=260)
 
-# --- TAB 2: AI PHOTO-TO-GCSE-QUIZ ---
+# --- TAB 2: AI PHOTO-TO-QUIZ + AI MARKING ---
 with tab2:
     st.subheader("Turn Your Notes Into an Exam Quiz")
-    board = st.selectbox("Select your UK Exam Board:", ["AQA", "Edexcel", "OCR", "WJEC"])
+    board = st.selectbox("Select your UK Exam Board:", ["AQA", "Edexcel", "OCR", "WJEC"], key="quiz_board")
     photo = st.file_uploader("📸 Tap to Take Photo (with Zoom) or Upload Notes", type=["jpg", "png", "jpeg"])
-    api_key = st.secrets.get("GEMINI_API_KEY", "")
 
     if photo and api_key:
         img = Image.open(photo)
@@ -108,11 +107,71 @@ with tab2:
             with st.spinner(f"Creating {board}-style questions..."):
                 try:
                     client = genai.Client(api_key=api_key)
-                    prompt = f"You are a strict UK {board} GCSE/A-Level examiner. Look at this photo of a student's textbook or revision notes. Write 5 active-recall exam questions based ONLY on this photo using official {board} command words. List Questions 1 to 5 first, then put '---' and list the Mark Scheme Answers below."
+                    prompt = f"You are a strict UK {board} GCSE/A-Level examiner. Look at this photo of a student's textbook or revision notes. Write 5 numbered active-recall exam questions based ONLY on this photo using official {board} command words. Do NOT include the answers yet so the student can try answering them first!"
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
                         contents=[img, prompt]
                     )
-                    st.markdown(response.text)
+                    st.session_state["quiz_questions"] = response.text
+                except Exception as e:
+                    st.error(f"API Error: {e}")
+
+    if "quiz_questions" in st.session_state:
+        st.markdown("### 📝 Your Exam Questions")
+        st.markdown(st.session_state["quiz_questions"])
+        
+        user_answers = st.text_area("Type your answers below (e.g., 1. ... 2. ...) and let the AI Examiner grade you:")
+        if st.button("Mark My Answers ✅"):
+            if user_answers.strip():
+                with st.spinner("AI Examiner is grading your work..."):
+                    try:
+                        client = genai.Client(api_key=api_key)
+                        grade_prompt = f"""
+                        You are a UK {board} examiner. Here were the 5 questions:
+                        {st.session_state['quiz_questions']}
+                        
+                        Here are the student's answers:
+                        {user_answers}
+                        
+                        Grade each answer (Correct / Partially Correct / Incorrect), give a final score out of 5, and show the exact official {board} mark-scheme answer for each question.
+                        """
+                        grade_res = client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=grade_prompt
+                        )
+                        st.markdown("### 🏆 Examiner Feedback")
+                        st.markdown(grade_res.text)
+                    except Exception as e:
+                        st.error(f"API Error: {e}")
+
+# --- TAB 3: AI EXAM TUTOR CHAT ---
+with tab3:
+    st.subheader("🤖 Ask Your AI GCSE/A-Level Tutor")
+    tutor_board = st.selectbox("Exam Board:", ["AQA", "Edexcel", "OCR", "WJEC"], key="tutor_board")
+    subject = st.text_input("Subject (e.g. GCSE Biology, Computer Science, History):", value="GCSE Computer Science")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask anything or ask for a practice exam question..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    client = genai.Client(api_key=api_key)
+                    tutor_prompt = f"You are a friendly, sharp UK {tutor_board} {subject} tutor helping a secondary school student revise. Keep explanations clear, concise, and focused on UK exam mark schemes. Student says: {prompt}"
+                    res = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=tutor_prompt
+                    )
+                    st.markdown(res.text)
+                    st.session_state.messages.append({"role": "assistant", "content": res.text})
                 except Exception as e:
                     st.error(f"API Error: {e}")
