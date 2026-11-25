@@ -136,7 +136,7 @@ with tab2:
                         Grade each answer (Correct / Partially Correct / Incorrect), give a final score out of 5, and show the exact official {board} mark-scheme answer for each question.
                         """
                         grade_res = client.models.generate_content(
-                            model="gemini-2.5-flash",
+                            model="gemini-3.8-flash",
                             contents=grade_prompt
                         )
                         st.markdown("### 🏆 Examiner Feedback")
@@ -168,7 +168,7 @@ with tab3:
                     client = genai.Client(api_key=api_key)
                     tutor_prompt = f"You are a friendly, sharp UK {tutor_board} {subject} tutor helping a secondary school student revise. Keep explanations clear, concise, and focused on UK exam mark schemes. Student says: {prompt}"
                     res = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.8-flash",
                         contents=tutor_prompt
                     )
                     st.markdown(res.text)
